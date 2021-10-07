@@ -1,0 +1,4 @@
+idproduct,brand,name,description,serial_no,product_code,location
+000001,Lenovo,Legion 5,Gaming laptop,000001,LAP-LN-001,Warehouse
+000002,HP,Envy,Office laptop,000002,LAP-HP-001,Warehouse
+000003,Lenovo,Legion 5,Gaming laptop,000002,LAP-LN-001,Warehouse
