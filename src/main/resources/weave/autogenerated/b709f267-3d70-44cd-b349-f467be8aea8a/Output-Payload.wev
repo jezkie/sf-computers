@@ -1,0 +1,4 @@
+%dw 2.0
+
+type auto_b709f267_3d70_44cd_b349_f467be8aea8a_Output_Payload = Any {"class": "java.lang.Object"}
+

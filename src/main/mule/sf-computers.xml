@@ -27,7 +27,8 @@ http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/
 			<jms:factory-configuration brokerUrl="tcp://localhost:61616" />
 		</jms:active-mq-connection>
 	</jms:config>
-	<flow name="sf-computersFlow1" doc:id="82f615fa-9b1a-4137-b3ac-5597e40785ab" >
+	
+	<flow name="batch_upload_flow" doc:id="82f615fa-9b1a-4137-b3ac-5597e40785ab" >
 		<file:listener doc:name="On New or Updated File" doc:id="3251cbb9-387d-4ce3-9622-82e9d0b57f44" config-ref="File_Config" directory="input" moveToDirectory="processed" applyPostActionWhenFailed="false">
 			<scheduling-strategy >
 				<fixed-frequency />
@@ -121,7 +122,7 @@ WHERE idproduct = :id]]></db:sql>
 			<db:input-parameters ><![CDATA[#[{'id': vars.productId}]]]></db:input-parameters>
 		</db:update>
 		<db:query-single doc:name="product_item" doc:id="ef18ff2f-2373-4dab-ac46-83a2d0b8ee96" config-ref="Database_Config" target="productItem">
-			<db:sql ><![CDATA[SELECT serial_no FROM product_item WHERE idproduct = :id]]></db:sql>
+			<db:sql ><![CDATA[SELECT serial_no, name FROM product_item WHERE idproduct = :id]]></db:sql>
 			<db:input-parameters ><![CDATA[#[{'id': vars.productId}]]]></db:input-parameters>
 		</db:query-single>
 		<ee:transform doc:name="queue payload" doc:id="a949ade9-1b27-4988-9748-5b6504a0aee5">
@@ -136,13 +137,14 @@ output application/java
 	Phone: payload.phone,
 	LeadSource: 'Retail Store',
 	SerialNo__c: vars.productItem.serial_no,
-	Location__c: payload.location
+	Location__c: payload.location,
+	ProductName: vars.productItem.name
 }]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
 		<jms:publish doc:name="SF_CHECKOUT_QUEUE" doc:id="bdd3cdf9-4b32-452b-a8b1-ff85ad9ae375" config-ref="JMS_Config" destination="SF_CHECKOUT_QUEUE"/>
 	</flow>
-	<flow name="sf_checkout_queue_listener_flow" doc:id="ee89f443-7d8d-4565-b0f3-35f552db7b9c">
+	<flow name="checkout_queue_listener_flow" doc:id="ee89f443-7d8d-4565-b0f3-35f552db7b9c">
 		<jms:listener doc:name="SF_CHECKOUT_QUEUE" doc:id="8461a521-b1b0-4d76-88e2-157edf86e5dc" config-ref="JMS_Config" destination="SF_CHECKOUT_QUEUE">
 			<jms:consumer-type>
 				<jms:queue-consumer />
@@ -150,32 +152,85 @@ output application/java
 		</jms:listener>
 		<logger level="INFO" doc:name="Logger" doc:id="afe94480-f159-4c2c-8231-e8a98ca20e13" message="#[output application/java --- payload]"/>
 		<salesforce:query doc:name="Account" doc:id="6b27398c-9600-4e07-b43e-228789c17519" config-ref="Salesforce_Config" target="accounts" targetValue="#[payload as Array]">
-			<salesforce:salesforce-query ><![CDATA[SELECT Id FROM Account WHERE Name = ':name']]></salesforce:salesforce-query>
-			<salesforce:parameters ><![CDATA[#[output application/java
+			<salesforce:salesforce-query><![CDATA[SELECT Id FROM Account WHERE Name = ':name']]></salesforce:salesforce-query>
+			<salesforce:parameters><![CDATA[#[output application/java
 ---
 {
 	"name" : payload.Location__c
 }]]]></salesforce:parameters>
 		</salesforce:query>
-		<logger level="INFO" doc:name="Logger" doc:id="199dff3d-dcf6-40a0-afe7-35c1315e6714" message="Account ID --&gt;  #[vars.accounts[0].Id]" />
-		<ee:transform doc:name="Contact payload" doc:id="763f2aed-8e97-48d5-a69b-1db3df0b7059" >
-			<ee:message >
-				<ee:set-payload ><![CDATA[%dw 2.0
+		<logger level="INFO" doc:name="Logger" doc:id="199dff3d-dcf6-40a0-afe7-35c1315e6714" message="Account ID:  #[vars.accounts[0].Id]" />
+		<flow-ref doc:name="insert_contact_flow" doc:id="ae4f6e75-6d95-4ee9-b063-bb30abeae341" name="insert_contact_flow" target="contactInsertResult" />
+		<logger level="INFO" doc:name="Logger" doc:id="30139e72-4ea9-4448-b93c-6748c66d9f64" message=" Contact ID: #[vars.contactInsertResult.items[0].id]" />
+		<flow-ref doc:name="insert_opportunity_flow" doc:id="b46fce79-b5f1-488f-b38c-889863f0bf64" name="insert_opportunity_flow" target="opportunityInsertResult" />
+		<logger level="INFO" doc:name="Logger" doc:id="4bd7702b-5793-48b6-94ba-098a5496027b" message="Opportunity ID: #[vars.opportunityInsertResult.items[0].id]" />
+		<flow-ref doc:name="insert_opportunity_contact_flow" doc:id="8aff97b2-9c27-44a7-91e1-f8d8b9e2fc7e" name="insert_opportunity_contact_flow" target="opportunityContactInsertResult" />
+		<logger level="INFO" doc:name="Logger" doc:id="a9085110-ec3e-4b6a-b2cd-0db7b57e9290" message="Opportunity Contact Role ID: #[vars.opportunityContactInsertResult.items[0].id]" />
+	</flow>
+	<flow name="insert_opportunity_contact_flow" doc:id="c08dae0a-c945-4091-a1fd-7809a4b8bfcc" >
+		<ee:transform doc:name="Opportunity Contact payload" doc:id="5dd055b9-c86e-4be0-b15a-0c3ec9bde3a8">
+					<ee:message>
+					</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="opportunityContact" ><![CDATA[%dw 2.0
 output application/java
 ---
 [
-	payload - "SerialNo__c" - "Location__c" ++
+	{
+		OpportunityId: vars.opportunityInsertResult.items[0].id,
+		ContactId: vars.contactInsertResult.items[0].id
+	}	
+]]]></ee:set-variable>
+			</ee:variables>
+				
+</ee:transform>
+		<salesforce:create type="OpportunityContactRole" doc:name="Opportunity Contact" doc:id="9cf68cd4-421d-4426-ab71-1e1e9d5db141" config-ref="Salesforce_Config" >
+			<salesforce:records ><![CDATA[#[vars.opportunityContact]]]></salesforce:records>
+		</salesforce:create>
+	</flow>
+	<flow name="insert_opportunity_flow" doc:id="d221f969-a121-4c5a-9c5d-dc6def4e793b" >
+		<ee:transform doc:name="Opportunity payload" doc:id="3b766279-08bc-4721-8d36-456676b37e72">
+					<ee:message>
+					</ee:message>
+					<ee:variables>
+						<ee:set-variable variableName="opportunity"><![CDATA[%dw 2.0
+output application/java
+---
+[
+	{
+		AccountId: vars.accounts[0].Id,
+		Name: payload.FirstName ++ " " ++ payload.LastName ++ " - " ++ payload.ProductName,
+		StageName: "Closed Won",
+		CloseDate: now() as String {format: "yyyy-MM-dd"} as Date
+	}
+]]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+		<salesforce:create type="Opportunity" doc:name="Opportunity" doc:id="8d7c51ba-04b6-49ba-b07e-04374b10ef1b" config-ref="Salesforce_Config">
+			<salesforce:records ><![CDATA[#[vars.opportunity]]]></salesforce:records>
+		</salesforce:create>
+	</flow>
+	<flow name="insert_contact_flow" doc:id="529a7496-3e41-4466-9485-52daab53bc28" >
+		<ee:transform doc:name="Contact payload" doc:id="e9aba0d4-a10e-4e8a-b330-5ac041e4b367">
+			<ee:message>
+			</ee:message>
+					<ee:variables>
+						<ee:set-variable variableName="contact"><![CDATA[%dw 2.0
+output application/java
+---
+[
+	payload - "SerialNo__c" - "Location__c" - "ProductName" ++
 
 	{
 		AccountId: vars.accounts[0].Id,	
 	}	
 ]
-]]></ee:set-payload>
-			</ee:message>
+]]></ee:set-variable>
+					</ee:variables>
 		</ee:transform>
-		<logger level="INFO" doc:name="Logger" doc:id="51bf5788-1cad-4dcd-bec9-ee6ca5836f19" message="Contact payload --&gt; #[payload]"/>
-		<salesforce:create type="Contact" doc:name="Contact" doc:id="5418bfde-2afa-4e7b-a697-559f876ab740" config-ref="Salesforce_Config"/>
-		<logger level="INFO" doc:name="Logger" doc:id="30139e72-4ea9-4448-b93c-6748c66d9f64" />
+		<salesforce:create type="Contact" doc:name="Contact" doc:id="07c66895-7444-43de-a757-d8054e7acc5f" config-ref="Salesforce_Config">
+			<salesforce:records ><![CDATA[#[vars.contact]]]></salesforce:records>
+		</salesforce:create>
 	</flow>
 	<flow name="sf-computersFlow2" doc:id="421acc3b-1dbb-4fbe-b924-1b3651c1fe58" >
 		<ee:transform doc:name="Transform Message" doc:id="58db1570-162d-4703-863a-b83091517bf7" >
@@ -191,11 +246,11 @@ output application/java
 			</ee:message>
 		</ee:transform>
 	</flow>
-	<flow name="sf-computersFlow" doc:id="c25632be-8394-4d09-b7b8-cc77ce5b0ea5" >
-		<http:listener doc:name="Listener" doc:id="8afaca12-d333-4b1a-a5ad-9ed03ab2998c" config-ref="HTTP_Listener_config" path="/productItems/{ID}/move/{location}"/>
+	<flow name="sf-computersFlow" doc:id="c25632be-8394-4d09-b7b8-cc77ce5b0ea5" initialState="stopped">
+		<http:listener doc:name="Listener" doc:id="8afaca12-d333-4b1a-a5ad-9ed03ab2998c" config-ref="HTTP_Listener_config" path="/productItems/{ID}/move/{location}" allowedMethods="PUT"/>
 		<logger level="INFO" doc:name="Logger" doc:id="f917aba9-13bb-43a9-81bb-09de5dfce5d7" message="#[attributes.uriParams]"/>
 	</flow>
-	<flow name="product_item_put_flow" doc:id="a9954a92-6580-48ab-bb8c-5a7309887d47" >
+	<flow name="product_item_put_flow" doc:id="a9954a92-6580-48ab-bb8c-5a7309887d47" initialState="stopped">
 		<http:listener doc:name="PUT /productItem" doc:id="979fd3a2-df30-4257-af9c-b805fecd6851" config-ref="HTTP_Listener_config" path="/productItem/{ID}" allowedMethods="PUT"/>
 		<logger level="INFO" doc:name="Logger" doc:id="06887064-f97d-4bb0-95be-fa5c0828f86a" message="#[attributes.uriParams.ID]"/>
 		<ee:transform doc:name="Transform Message" doc:id="e3eeeea9-c67b-4d95-a3d5-4a95fee62f9d" >
