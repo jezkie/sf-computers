@@ -10,122 +10,148 @@ http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/cu
 http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd
 http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
 http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
-	<file:config name="File_Config" doc:name="File Config" doc:id="c563dac2-939f-43f1-b01c-952785620172" >
-		<file:connection workingDir="F:\Workspace\Mule\Training\sf-computers\src\main\resources" />
+	<file:config name="File_Config" doc:name="File Config" doc:id="5a44694e-198a-485e-989d-b4c8472eee3b" >
+		<file:connection workingDir="E:\studio-workspace\sf-computers\src\main\resources" />
 	</file:config>
-	<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config" doc:id="302f3280-8d2a-421a-955b-862830afff66" >
+	<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config" doc:id="84f8f040-6c4a-43b9-b902-bc2087acb2a7" >
 		<salesforce:basic-connection username="jezkie00secondary@empathetic-wolf-nyul3s.com" password="Admin1812!" securityToken="Pv1DckVSEn0uZds35zK9MgCV" />
 	</salesforce:sfdc-config>
-	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="467b0d12-9e93-4c73-9dd2-9b370b4379b7" basePath="/sf-computers">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="31296698-0f81-45db-894d-4934846ee0a2" basePath="/sf-computers">
 		<http:listener-connection host="0.0.0.0" port="8081" />
 	</http:listener-config>
-	<db:config name="Database_Config" doc:name="Database Config" doc:id="f6f21282-5eb7-44e6-a141-80dfb4661199" >
-		<db:my-sql-connection host="localhost" port="3306" user="root" password="Admin1812!" database="warehouse" />
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="dad26c9d-3610-4fc1-aa62-d47a98c50188" >
+		<db:my-sql-connection host="localhost" port="3306" user="root" password="Admin1812!" database="sfcomputers" />
 	</db:config>
-	<jms:config name="JMS_Config" doc:name="JMS Config" doc:id="af8f83bc-3cee-4f74-a9f4-307f1822a09f" >
+	<jms:config name="JMS_Config" doc:name="JMS Config" doc:id="d7311b32-20d3-46d5-953d-98e4ca959e18" >
 		<jms:active-mq-connection username="admin" password="admin" >
 			<jms:factory-configuration brokerUrl="tcp://localhost:61616" />
 		</jms:active-mq-connection>
 	</jms:config>
 	
-	<flow name="batch_upload_flow" doc:id="82f615fa-9b1a-4137-b3ac-5597e40785ab" >
-		<file:listener doc:name="On New or Updated File" doc:id="3251cbb9-387d-4ce3-9622-82e9d0b57f44" config-ref="File_Config" directory="input" moveToDirectory="processed" applyPostActionWhenFailed="false">
+	<flow name="batch_upload_flow" doc:id="7157b6e4-2282-4d56-8e0e-503259288f53" >
+		<file:listener doc:name="On New or Updated File" doc:id="5c6ed09e-8b9e-48f2-9b04-b842d13bda51" config-ref="File_Config" directory="input" moveToDirectory="processed" applyPostActionWhenFailed="false" renameTo="#['arrival-' ++ (now() as String {format: &quot;yyyy_MM_dd_HH_mm_ss_SSS&quot;}) ++ '.processed']">
 			<scheduling-strategy >
 				<fixed-frequency />
 			</scheduling-strategy>
 			<file:matcher filenamePattern="*.csv"/>
 		</file:listener>
-		<ee:transform doc:name="Transform Message" doc:id="884b500f-bc3c-441e-b616-656b82a80e1d" >
+		<ee:transform doc:name="Transform Message" doc:id="eeee4002-57f7-4585-8b35-25a80f3d0848" >
 			<ee:message >
 				<ee:set-payload ><![CDATA[%dw 2.0
 output application/java
 ---
-payload map {
-	Name: $.name,
-	SerialNo__c: $.serial_no,
-	Location__c: $.location,
-	ProductCode: $.product_code,
-	Brand: $.brand,
-	Description: $.description,
-	Status__c: "Available"
-}
+payload
 ]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
-		<logger level="INFO" doc:name="Logger" doc:id="245beb8a-8e51-45c0-be84-dc4408696b87" message="#[output application/json --- payload]" />
-		<batch:job jobName="sf-computersBatch_Job" doc:id="0ff1301d-b945-40aa-b849-4a7c1eec4189" >
+		<logger level="INFO" doc:name="Logger" doc:id="7af7226c-7ed1-47b7-b0a6-dd6c850fe0e5" message="#[output application/json --- payload]" />
+		<batch:job jobName="sf-computersBatch_Job" doc:id="f96ff411-ab5e-4a19-ad12-5ea94e71471c" >
 			<batch:process-records>
-				<batch:step name="Check_Product_Batch_Step" doc:id="b1c6d04c-53b2-4154-889a-acd013130faa" >
-					<salesforce:query doc:name="Product2" doc:id="3c980e30-cdbb-4339-9b14-3fda937f4180" config-ref="Salesforce_Config" target="products" targetValue="#[payload as Array]">
-						<salesforce:salesforce-query ><![CDATA[SELECT Id, ProductCode FROM Product2 WHERE ProductCode = ':prod_code']]></salesforce:salesforce-query>
+				<batch:step name="Check_Product_Batch_Step" doc:id="5f928401-8861-4148-a5bb-d584a12ab7fe" >
+					<salesforce:query doc:name="Product2" doc:id="e9327f57-3c7c-4c84-8c00-53d291743f9f" config-ref="Salesforce_Config" target="products" targetValue="#[payload as Array]">
+						<salesforce:salesforce-query ><![CDATA[SELECT Id, ProductCode, Brand__c, Name FROM Product2 WHERE ProductCode = ':prod_code']]></salesforce:salesforce-query>
 						<salesforce:parameters ><![CDATA[#[output application/java
 ---
 {
-	"prod_code" : payload.ProductCode default "" as String
+	"prod_code" : payload.product_code default "" as String
 }]]]></salesforce:parameters>
 					</salesforce:query>
-					<salesforce:query doc:name="ProductItem__c" doc:id="26cf0c20-fcc9-4e4d-b4dd-a63bedb12b59" config-ref="Salesforce_Config" target="productItems" targetValue="#[payload as Array]">
+					<salesforce:query doc:name="ProductItem__c" doc:id="dea0c8d6-16ae-4f36-b477-7190416cc358" config-ref="Salesforce_Config" target="productItems" targetValue="#[payload as Array]">
 						<salesforce:salesforce-query ><![CDATA[SELECT Id FROM ProductItem__c WHERE SerialNo__c = ':serial']]></salesforce:salesforce-query>
 						<salesforce:parameters ><![CDATA[#[output application/java
 ---
 {
-	"serial" : payload.SerialNo__c default "" as String
+	"serial" : payload.serial_no default "" as String
 }]]]></salesforce:parameters>
 					</salesforce:query>
-					<set-variable value="#[(sizeOf(vars.products) &gt; 0) and (sizeOf(vars.productItems) == 0)]" doc:name="valid" doc:id="d0842787-1111-4501-8f2c-001a7e490499" variableName="valid"/>
+					<salesforce:query doc:name="LaptopConfiguration__c" doc:id="b3006d38-ea3d-480a-aa1e-60d3606c1651" config-ref="Salesforce_Config" target="laptopConfigurations">
+						<salesforce:salesforce-query ><![CDATA[SELECT Id FROM LaptopConfiguration__c 
+WHERE Processor__c = ':cpu' 
+AND Memory__c = ':ram' 
+AND StorageType__c = ':storage'
+AND ConfigurableProduct__r.ProductCode = ':product_code']]></salesforce:salesforce-query>
+						<salesforce:parameters ><![CDATA[#[output application/java
+---
+{
+	"cpu" : payload.cpu default '' as String,
+	"ram" : payload.ram default '' as String,
+	"storage" : payload.storage default '' as String,
+	"product_code" : payload.product_code default '' as String
+}]]]></salesforce:parameters>
+					</salesforce:query>
+					<set-variable value="#[(sizeOf(vars.products) &gt; 0) and (sizeOf(vars.productItems) == 0) and (sizeOf(vars.laptopConfigurations) &gt; 0)]" doc:name="valid" doc:id="549c5fd1-2725-4786-880c-4cc700f170d2" variableName="valid"/>
 				</batch:step>
-				<batch:step name="Insert_to_DB_Batch_Step" doc:id="5e571342-2e28-4815-9a56-f36e5860a2ed" acceptExpression="#[vars.valid]">
-					<logger level="INFO" doc:name="Logger" doc:id="a7ef2993-5010-4688-832e-412373cd36a7" message="IS VALID --&gt; #[vars.valid]"/>
-					<db:insert doc:name="product_item" doc:id="55971a5e-d2e2-4bde-b09f-54d065a344e7" config-ref="Database_Config" target="insertResult">
-						<db:sql ><![CDATA[INSERT INTO product_item (brand, name, description, serial_no, product_code, location)
-values(:Brand, :Name, :Description, :SerialNo__c, :ProductCode, :Location__c)]]></db:sql>
-						<db:input-parameters ><![CDATA[#[payload]]]></db:input-parameters>
+				<batch:step name="Insert_to_DB_Batch_Step" doc:id="4e800b70-e2b0-4372-9122-9f3d061f7c2a" acceptExpression="#[vars.valid]">
+					<logger level="INFO" doc:name="Logger" doc:id="e894d8b7-6cf8-46f2-9e64-5bf0379d99de" message="IS VALID --&gt; #[vars.valid]"/>
+					<db:insert doc:name="product_item" doc:id="d5f69ee8-f350-48f3-9a29-7f9083f7b28f" config-ref="Database_Config" target="insertResult">
+						<db:sql ><![CDATA[INSERT INTO product_item (brand, name, serial_no, product_code, location,cpu,ram,storage)
+values(:brand, :name, :serial_no, :product_code, :location, :cpu, :ram, :storage)
+]]></db:sql>
+						<db:input-parameters ><![CDATA[#[payload ++ { name: vars.products[0].Name, brand: vars.products[0].Brand__c }]]]></db:input-parameters>
 					</db:insert>
 				</batch:step>
-				<batch:step name="Insert_to_Salesforce_Batch_Step" doc:id="3f92a5bc-fa9f-499b-8080-d6bac1548f27" acceptExpression="#[vars.valid]">
-					<ee:transform doc:name="ProductItem__c payload" doc:id="342acccf-f4dc-40df-b560-37cf1991eccf" >
+				<batch:step name="Insert_to_Salesforce_Batch_Step" doc:id="a80b8da8-1e00-46e5-afcf-d1743d916629" acceptExpression="#[vars.valid]">
+					<ee:transform doc:name="Transform Message" doc:id="16034eae-8208-41a3-8fe0-dab92af751fd" >
 						<ee:message >
 							<ee:set-payload ><![CDATA[%dw 2.0
 output application/java
 ---
-{
-	Name: payload.Name,
-	SerialNo__c: payload.SerialNo__c,
-	Location__c: payload.Location__c,
-	Product__c: vars.products[0].Id
-}]]></ee:set-payload>
+payload ++ 
+{ LaptopConfiguration__c: vars.laptopConfigurations[0].Id } ++
+{ Product__c: vars.products[0].Id } ++ 
+{ Name: vars.products[0].Name }]]></ee:set-payload>
 						</ee:message>
 					</ee:transform>
-					<logger level="INFO" doc:name="Logger" doc:id="cccd7c58-47f2-4f8b-9391-0fa1ea6c80d5" message="#[output application/json --- payload]"/>
-					<batch:aggregator doc:name="Batch Aggregator" doc:id="f7ade06b-7791-47d5-9f2f-fada5e2b28a2" size="100">
-						<logger level="INFO" doc:name="Logger" doc:id="2eb8e16b-3560-4ad8-a36f-7fcadf509b42" message="#[output application/json &#10;--- &#10;payload]" />
-						<salesforce:create type="ProductItem__c" doc:name="ProductItem__c" doc:id="c2b246f3-04f7-4d92-8e47-01d36653d5d6" config-ref="Salesforce_Config">
+					<logger level="INFO" doc:name="Logger" doc:id="d0f863cd-1c18-4467-9725-8825656661f5" message="#[output application/json --- payload]"/>
+					<batch:aggregator doc:name="Batch Aggregator" doc:id="38b889dd-a10b-4b53-933e-e1c28c6881cc" size="100">
+						<logger level="INFO" doc:name="Logger" doc:id="159b72b6-529d-454d-af27-96ee67a9ecf3" message="#[output application/json &#10;&#10;--- &#10;payload]" />
+						<salesforce:create type="ProductItem__c" doc:name="ProductItem__c" doc:id="16f5dc14-e990-4645-b785-d5b972257e1b" config-ref="Salesforce_Config">
+							<salesforce:records ><![CDATA[#[payload map {
+	Name: $.Name ++ ' ' ++ $.serial_no,
+	SerialNo__c: $.serial_no,
+	Location__c: $.location,
+	Status__c: "Available",
+	Product__c: $.Product__c,
+	LaptopConfiguration__c: $.LaptopConfiguration__c
+}]]]></salesforce:records>
+
 						</salesforce:create>
 					</batch:aggregator>
 				</batch:step>
-				<batch:step name="Product_Not_Exists" doc:id="930504b2-4f18-47fb-a665-3a185a47f06a" acceptExpression="#[sizeOf(vars.products) == 0]">
-					<batch:aggregator doc:name="Batch Aggregator" doc:id="1cfc8623-c230-41f1-a366-8e1b3829c4db" size="100">
-						<logger level="INFO" doc:name="Logger" doc:id="10b0b192-7123-44e7-90e2-9a6f4bbecfaf" message="#[payload]"/>
+				<batch:step name="Product_Not_Exists" doc:id="0af12a50-1a2c-4e35-a45e-c6e6a42b0108" acceptExpression="#[sizeOf(vars.products) == 0]">
+					<batch:aggregator doc:name="Batch Aggregator" doc:id="2c48af10-ec47-4e66-93c6-1b0feb0a8bf9" size="100">
+						<logger level="INFO" doc:name="Logger" doc:id="4db4e555-e29d-4f51-9bde-5d95333eec7b" message="#[output application/json --- &#10;(payload distinctBy $.product_code) map {&#10;	serial_no: $.serial_no,&#10;	product_code: $.product_code,&#10;	cpu: $.cpu,&#10;	ram: $.ram,&#10;	storage: $.storage,&#10;	reason: 'Product does not exists.'&#10;}]"/>
 					</batch:aggregator>
 				</batch:step>
-			</batch:process-records>
+				<batch:step name="Duplicate_Product_Items" doc:id="5ba83ba0-aae7-404d-9693-4fa8b61d99bd" acceptExpression="#[sizeOf(vars.productItems) &gt; 0]">
+					<batch:aggregator doc:name="Batch Aggregator" doc:id="bddfa279-02c7-492b-a4cd-ed11ec7a8b72" size="100">
+						<logger level="INFO" doc:name="Logger" doc:id="d1ccd468-df63-4fec-8675-f01bc0a86da3" message="#[output application/json --- &#10;(payload distinctBy $.serial_no) map {&#10;	serial_no: $.serial_no,&#10;	product_code: $.product_code,&#10;	cpu: $.cpu,&#10;	ram: $.ram,&#10;	storage: $.storage,&#10;	reason: 'Product Item already in Salesforce.'&#10;}]"/>
+					</batch:aggregator>
+				</batch:step>
+				<batch:step name="No_Configuration_Error" doc:id="7d9f1ce5-f8f4-4fce-ab6b-8cd2c9ad4dac" acceptExpression="#[sizeOf(vars.products) &gt; 0 and sizeOf(vars.laptopConfigurations) == 0]" >
+					<batch:aggregator doc:name="Batch Aggregator" doc:id="5e4f49f3-6ce5-4250-aadd-ee5fdbf4e14e" size="100" >
+						<logger level="INFO" doc:name="Logger" doc:id="75772a36-958a-4331-8ab9-d6dec4d1f7d4" message="#[output application/json --- &#10;(payload distinctBy ($.cpu ++ $.ram ++ $.storage)) map {&#10;	serial_no: $.serial_no,&#10;	product_code: $.product_code,&#10;	cpu: $.cpu,&#10;	ram: $.ram,&#10;	storage: $.storage,&#10;	reason: 'Product Item already in Salesforce.'&#10;}]" />
+					</batch:aggregator>
+				</batch:step>
+			
+</batch:process-records>
 		</batch:job>
 	</flow>
-	<flow name="checkout_flow" doc:id="3fed896f-43ff-46bb-99d4-7d6ec8adfb84" >
-		<http:listener doc:name="Listener" doc:id="2096283e-0457-4662-b345-13ac13d651a7" config-ref="HTTP_Listener_config" path="/productItems/{ID}/checkout" allowedMethods="POST"/>
-		<logger level="INFO" doc:name="Logger" doc:id="0f3f940f-ea85-4002-9802-c531d62a1d11" />
-		<set-variable value="#[attributes.uriParams.ID]" doc:name="productId" doc:id="0af77d46-aa91-4862-8b10-a53ef4fadb13" variableName="productId"/>
-		<db:update doc:name="product_item" doc:id="30cc3f39-29a7-452e-ac8c-d24d1f1fe670" config-ref="Database_Config" target="updateResult">
+	<flow name="checkout_flow" doc:id="f6103bf7-ad87-4272-8631-09d73ee4c9c1" >
+		<http:listener doc:name="Listener" doc:id="b1fdaaaa-5365-41e1-a826-7024d32a3aa0" config-ref="HTTP_Listener_config" path="/productItems/{ID}/checkout" allowedMethods="POST"/>
+		<logger level="INFO" doc:name="Logger" doc:id="dee8ab51-8087-484e-961b-7f66d059ee7c" />
+		<set-variable value="#[attributes.uriParams.ID]" doc:name="productId" doc:id="b0465ce1-220a-4c48-9251-0c825141e36c" variableName="productId"/>
+		<db:update doc:name="product_item" doc:id="c529f59f-7366-4298-a8c6-a3a02e3c34f8" config-ref="Database_Config" target="updateResult">
 			<db:sql ><![CDATA[UPDATE product_item
 SET status = "Unavailable"
-WHERE idproduct = :id]]></db:sql>
+WHERE id = :id]]></db:sql>
 			<db:input-parameters ><![CDATA[#[{'id': vars.productId}]]]></db:input-parameters>
 		</db:update>
-		<db:query-single doc:name="product_item" doc:id="ef18ff2f-2373-4dab-ac46-83a2d0b8ee96" config-ref="Database_Config" target="productItem">
-			<db:sql ><![CDATA[SELECT serial_no, name FROM product_item WHERE idproduct = :id]]></db:sql>
+		<db:query-single doc:name="product_item" doc:id="8cdec5fd-4ae4-461b-a177-8da0c0c30114" config-ref="Database_Config" target="productItem">
+			<db:sql ><![CDATA[SELECT serial_no, name FROM product_item WHERE id = :id]]></db:sql>
 			<db:input-parameters ><![CDATA[#[{'id': vars.productId}]]]></db:input-parameters>
 		</db:query-single>
-		<ee:transform doc:name="queue payload" doc:id="a949ade9-1b27-4988-9748-5b6504a0aee5">
+		<ee:transform doc:name="queue payload" doc:id="9eef469c-a65a-4735-b928-8e667312600a">
 			<ee:message>
 				<ee:set-payload><![CDATA[%dw 2.0
 output application/java
@@ -142,16 +168,34 @@ output application/java
 }]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
-		<jms:publish doc:name="SF_CHECKOUT_QUEUE" doc:id="bdd3cdf9-4b32-452b-a8b1-ff85ad9ae375" config-ref="JMS_Config" destination="SF_CHECKOUT_QUEUE"/>
+		<jms:publish doc:name="SF_CHECKOUT_QUEUE" doc:id="c5aa942e-679e-494f-a036-674a7f88cd07" config-ref="JMS_Config" destination="SF_CHECKOUT_QUEUE"/>
 	</flow>
-	<flow name="checkout_queue_listener_flow" doc:id="ee89f443-7d8d-4565-b0f3-35f552db7b9c">
-		<jms:listener doc:name="SF_CHECKOUT_QUEUE" doc:id="8461a521-b1b0-4d76-88e2-157edf86e5dc" config-ref="JMS_Config" destination="SF_CHECKOUT_QUEUE">
+	<flow name="checkout_queue_listener_flow" doc:id="4907a28b-f7e7-49f5-b4cf-47f7be9552e7">
+		<jms:listener doc:name="SF_CHECKOUT_QUEUE" doc:id="881bc827-a502-449a-906d-9e40445f7932" config-ref="JMS_Config" destination="SF_CHECKOUT_QUEUE">
 			<jms:consumer-type>
 				<jms:queue-consumer />
 			</jms:consumer-type>
 		</jms:listener>
-		<logger level="INFO" doc:name="Logger" doc:id="afe94480-f159-4c2c-8231-e8a98ca20e13" message="#[output application/java --- payload]"/>
-		<salesforce:query doc:name="Account" doc:id="6b27398c-9600-4e07-b43e-228789c17519" config-ref="Salesforce_Config" target="accounts" targetValue="#[payload as Array]">
+		<logger level="INFO" doc:name="Logger" doc:id="030c435b-94b3-4015-931b-5cc83a576e72" message="#[output application/java --- payload]"/>
+		<salesforce:query doc:name="ProductItem__c" doc:id="c9df31a0-3388-4fea-b0fb-614663cce919" config-ref="Salesforce_Config" target="productItem">
+			<salesforce:salesforce-query ><![CDATA[SELECT Id FROM ProductItem__c WHERE SerialNo__c = ':serial']]></salesforce:salesforce-query>
+			<salesforce:parameters ><![CDATA[#[output application/java
+---
+{
+	"serial" : payload.SerialNo__c
+}]]]></salesforce:parameters>
+		</salesforce:query>
+		<salesforce:update doc:name="ProductItem__c" doc:id="a9867f86-bbee-4df5-9c59-940a08f1bb26" config-ref="Salesforce_Config" type="ProductItem__c" target="productItemUpdate">
+			<salesforce:records ><![CDATA[#[output application/java
+---
+[
+	{
+	Id: vars.productItem[0].Id,
+	Status__c: 'Unavailable'
+}
+]]]]></salesforce:records>
+		</salesforce:update>
+		<salesforce:query doc:name="Account" doc:id="fcfdebde-990e-4dcf-aa0a-2030ddcce763" config-ref="Salesforce_Config" target="accounts" targetValue="#[payload as Array]">
 			<salesforce:salesforce-query><![CDATA[SELECT Id FROM Account WHERE Name = ':name']]></salesforce:salesforce-query>
 			<salesforce:parameters><![CDATA[#[output application/java
 ---
@@ -159,16 +203,16 @@ output application/java
 	"name" : payload.Location__c
 }]]]></salesforce:parameters>
 		</salesforce:query>
-		<logger level="INFO" doc:name="Logger" doc:id="199dff3d-dcf6-40a0-afe7-35c1315e6714" message="Account ID:  #[vars.accounts[0].Id]" />
-		<flow-ref doc:name="insert_contact_flow" doc:id="ae4f6e75-6d95-4ee9-b063-bb30abeae341" name="insert_contact_flow" target="contactInsertResult" />
-		<logger level="INFO" doc:name="Logger" doc:id="30139e72-4ea9-4448-b93c-6748c66d9f64" message=" Contact ID: #[vars.contactInsertResult.items[0].id]" />
-		<flow-ref doc:name="insert_opportunity_flow" doc:id="b46fce79-b5f1-488f-b38c-889863f0bf64" name="insert_opportunity_flow" target="opportunityInsertResult" />
-		<logger level="INFO" doc:name="Logger" doc:id="4bd7702b-5793-48b6-94ba-098a5496027b" message="Opportunity ID: #[vars.opportunityInsertResult.items[0].id]" />
-		<flow-ref doc:name="insert_opportunity_contact_flow" doc:id="8aff97b2-9c27-44a7-91e1-f8d8b9e2fc7e" name="insert_opportunity_contact_flow" target="opportunityContactInsertResult" />
-		<logger level="INFO" doc:name="Logger" doc:id="a9085110-ec3e-4b6a-b2cd-0db7b57e9290" message="Opportunity Contact Role ID: #[vars.opportunityContactInsertResult.items[0].id]" />
+		<logger level="INFO" doc:name="Logger" doc:id="7d088310-c5d5-4450-a437-3c317b72a8e0" message="Account ID:  #[vars.accounts[0].Id]" />
+		<flow-ref doc:name="insert_contact_flow" doc:id="9f4a824e-beb8-4664-9b87-30391f0c3553" name="insert_contact_flow" target="contactInsertResult" />
+		<logger level="INFO" doc:name="Logger" doc:id="b5c465e4-5bab-4959-8451-40e3a205a309" message=" Contact ID: #[vars.contactInsertResult.items[0].id]" />
+		<flow-ref doc:name="insert_opportunity_flow" doc:id="55804b79-efda-4a45-a571-5f16ef8f9cc3" name="insert_opportunity_flow" target="opportunityInsertResult" />
+		<logger level="INFO" doc:name="Logger" doc:id="f676373e-ea38-4870-9a31-ae8aee44215a" message="Opportunity ID: #[vars.opportunityInsertResult.items[0].id]" />
+		<flow-ref doc:name="insert_opportunity_contact_flow" doc:id="8c807dba-482b-4571-9959-2074ca7096df" name="insert_opportunity_contact_flow" target="opportunityContactInsertResult" />
+		<logger level="INFO" doc:name="Logger" doc:id="e45e96b8-5e6f-4d4d-bb10-808091b8197f" message="Opportunity Contact Role ID: #[vars.opportunityContactInsertResult.items[0].id]" />
 	</flow>
-	<flow name="insert_opportunity_contact_flow" doc:id="c08dae0a-c945-4091-a1fd-7809a4b8bfcc" >
-		<ee:transform doc:name="Opportunity Contact payload" doc:id="5dd055b9-c86e-4be0-b15a-0c3ec9bde3a8">
+	<flow name="insert_opportunity_contact_flow" doc:id="697f9a3d-2daf-482b-b00d-42b7c49ffb84" >
+		<ee:transform doc:name="Opportunity Contact payload" doc:id="7e7178f0-fd5a-4fa7-8b33-75a9db8a6d4f">
 					<ee:message>
 					</ee:message>
 			<ee:variables >
@@ -184,12 +228,12 @@ output application/java
 			</ee:variables>
 				
 </ee:transform>
-		<salesforce:create type="OpportunityContactRole" doc:name="Opportunity Contact" doc:id="9cf68cd4-421d-4426-ab71-1e1e9d5db141" config-ref="Salesforce_Config" >
+		<salesforce:create type="OpportunityContactRole" doc:name="Opportunity Contact" doc:id="a1514a8a-d6fc-493e-a06a-92368035b85a" config-ref="Salesforce_Config" >
 			<salesforce:records ><![CDATA[#[vars.opportunityContact]]]></salesforce:records>
 		</salesforce:create>
 	</flow>
-	<flow name="insert_opportunity_flow" doc:id="d221f969-a121-4c5a-9c5d-dc6def4e793b" >
-		<ee:transform doc:name="Opportunity payload" doc:id="3b766279-08bc-4721-8d36-456676b37e72">
+	<flow name="insert_opportunity_flow" doc:id="d3250f00-e4ef-4866-91c0-0785cc6444a2" >
+		<ee:transform doc:name="Opportunity payload" doc:id="ede70cf2-dcfd-4a0b-8271-476816087d7d">
 					<ee:message>
 					</ee:message>
 					<ee:variables>
@@ -206,12 +250,12 @@ output application/java
 ]]]></ee:set-variable>
 					</ee:variables>
 				</ee:transform>
-		<salesforce:create type="Opportunity" doc:name="Opportunity" doc:id="8d7c51ba-04b6-49ba-b07e-04374b10ef1b" config-ref="Salesforce_Config">
+		<salesforce:create type="Opportunity" doc:name="Opportunity" doc:id="1031ad96-b267-4b60-9208-e84e9e79c343" config-ref="Salesforce_Config">
 			<salesforce:records ><![CDATA[#[vars.opportunity]]]></salesforce:records>
 		</salesforce:create>
 	</flow>
-	<flow name="insert_contact_flow" doc:id="529a7496-3e41-4466-9485-52daab53bc28" >
-		<ee:transform doc:name="Contact payload" doc:id="e9aba0d4-a10e-4e8a-b330-5ac041e4b367">
+	<flow name="insert_contact_flow" doc:id="72934133-d145-40d4-8ac2-5dcd6cd742ec" >
+		<ee:transform doc:name="Contact payload" doc:id="cefcd47a-3a78-4dd3-b70b-36f66cfde20f">
 			<ee:message>
 			</ee:message>
 					<ee:variables>
@@ -228,46 +272,10 @@ output application/java
 ]]></ee:set-variable>
 					</ee:variables>
 		</ee:transform>
-		<salesforce:create type="Contact" doc:name="Contact" doc:id="07c66895-7444-43de-a757-d8054e7acc5f" config-ref="Salesforce_Config">
+		<salesforce:create type="Contact" doc:name="Contact" doc:id="08fe5ce8-a6e8-49aa-bce3-20f0b742af80" config-ref="Salesforce_Config">
 			<salesforce:records ><![CDATA[#[vars.contact]]]></salesforce:records>
 		</salesforce:create>
 	</flow>
-	<flow name="sf-computersFlow2" doc:id="421acc3b-1dbb-4fbe-b924-1b3651c1fe58" >
-		<ee:transform doc:name="Transform Message" doc:id="58db1570-162d-4703-863a-b83091517bf7" >
-			<ee:message >
-				<ee:set-payload ><![CDATA[%dw 2.0
-output application/java
----
-{
-	"a": "1",
-	"b": "2",
-	"c": "3"
-} - "a" - "b" ++ {"d": "4"}]]></ee:set-payload>
-			</ee:message>
-		</ee:transform>
-	</flow>
-	<flow name="sf-computersFlow" doc:id="c25632be-8394-4d09-b7b8-cc77ce5b0ea5" initialState="stopped">
-		<http:listener doc:name="Listener" doc:id="8afaca12-d333-4b1a-a5ad-9ed03ab2998c" config-ref="HTTP_Listener_config" path="/productItems/{ID}/move/{location}" allowedMethods="PUT"/>
-		<logger level="INFO" doc:name="Logger" doc:id="f917aba9-13bb-43a9-81bb-09de5dfce5d7" message="#[attributes.uriParams]"/>
-	</flow>
-	<flow name="product_item_put_flow" doc:id="a9954a92-6580-48ab-bb8c-5a7309887d47" initialState="stopped">
-		<http:listener doc:name="PUT /productItem" doc:id="979fd3a2-df30-4257-af9c-b805fecd6851" config-ref="HTTP_Listener_config" path="/productItem/{ID}" allowedMethods="PUT"/>
-		<logger level="INFO" doc:name="Logger" doc:id="06887064-f97d-4bb0-95be-fa5c0828f86a" message="#[attributes.uriParams.ID]"/>
-		<ee:transform doc:name="Transform Message" doc:id="e3eeeea9-c67b-4d95-a3d5-4a95fee62f9d" >
-			<ee:message >
-				<ee:set-payload ><![CDATA[%dw 2.0
-output application/java
----
-payload]]></ee:set-payload>
-			</ee:message>
-		</ee:transform>
-		<db:update doc:name="Update" doc:id="7cb247d2-cfcb-40da-88a8-682b4c74a21e" config-ref="Database_Config">
-			<db:sql ><![CDATA[UPDATE product_item
-SET location = :location,
-status = :status
-WHERE idproduct = :id]]></db:sql>
-			<db:input-parameters ><![CDATA[#[payload ++ {id: attributes.uriParams.ID}]]]></db:input-parameters>
-		</db:update>
-		<set-payload value='#["Product Item with ID: " ++ (attributes.uriParams.ID default "" as String) ++ " has been updated."]' doc:name="Set Payload" doc:id="b4ea4dec-2234-44ea-a5c3-415e8928aedb" />
-	</flow>
+	
+
 </mule>
