@@ -138,20 +138,42 @@ payload ++
 		</batch:job>
 	</flow>
 	<flow name="checkout_flow" doc:id="f6103bf7-ad87-4272-8631-09d73ee4c9c1" >
-		<http:listener doc:name="Listener" doc:id="b1fdaaaa-5365-41e1-a826-7024d32a3aa0" config-ref="HTTP_Listener_config" path="/productItems/{ID}/checkout" allowedMethods="POST"/>
-		<logger level="INFO" doc:name="Logger" doc:id="dee8ab51-8087-484e-961b-7f66d059ee7c" />
+		<http:listener doc:name="POST /productItems/{ID}/checkout" doc:id="b1fdaaaa-5365-41e1-a826-7024d32a3aa0" config-ref="HTTP_Listener_config" path="/productItems/{ID}/checkout" allowedMethods="POST"/>
 		<set-variable value="#[attributes.uriParams.ID]" doc:name="productId" doc:id="b0465ce1-220a-4c48-9251-0c825141e36c" variableName="productId"/>
-		<db:update doc:name="product_item" doc:id="c529f59f-7366-4298-a8c6-a3a02e3c34f8" config-ref="Database_Config" target="updateResult">
-			<db:sql ><![CDATA[UPDATE product_item
+		<db:query-single doc:name="product_item" doc:id="8cdec5fd-4ae4-461b-a177-8da0c0c30114" config-ref="Database_Config" target="productItem">
+			<db:sql><![CDATA[SELECT serial_no, name FROM product_item WHERE id = :id]]></db:sql>
+			<db:input-parameters><![CDATA[#[{'id': vars.productId}]]]></db:input-parameters>
+		</db:query-single>
+		<salesforce:query doc:name="ProductItem__c" doc:id="25869d1d-1394-45a3-8ec3-5a95683a8ce5" config-ref="Salesforce_Config" target="productItems_sf">
+			<salesforce:salesforce-query ><![CDATA[SELECT Id, SerialNo__c, Status__c FROM ProductItem__c WHERE SerialNo__c = ':serial' AND Status__c != 'Available']]></salesforce:salesforce-query>
+			<salesforce:parameters ><![CDATA[#[output application/java
+---
+{
+	"serial" : vars.productItem.serial_no
+}]]]></salesforce:parameters>
+		</salesforce:query>
+		<choice doc:name="Choice" doc:id="6ec383a3-a103-40d9-b60a-212c71028883" >
+			<when expression="#[sizeOf(vars.productItems_sf) &gt; 0]">
+				<logger level="INFO" doc:name="Logger" doc:id="9e9ecede-71a0-4a8e-82c2-cd2ff0de77e4" message="Can't checkout #[vars.productItems_sf[0].Status__c] unit with Serial Number: #[vars.productItem.serial_no]." />
+				<db:update doc:name="product_item" doc:id="2ed2725d-5c9c-4564-985a-83d2306b0f0f" config-ref="Database_Config" target="updateResult" >
+					<db:sql ><![CDATA[UPDATE product_item
+SET status = :status
+WHERE id = :id]]></db:sql>
+					<db:input-parameters ><![CDATA[#[{
+	'id': vars.productId,
+	'status': vars.productItems_sf[0].Status__c
+}]]]></db:input-parameters>
+				</db:update>
+				<set-payload value="#['Can\'t checkout ' ++ vars.productItems_sf[0].Status__c ++ ' unit with Serial Number: ' ++ vars.productItem.serial_no]" doc:name="Set Payload" doc:id="ad7b3172-0285-4394-b764-34f0892c1c3c" />
+			</when>
+			<otherwise >
+				<db:update doc:name="product_item" doc:id="c529f59f-7366-4298-a8c6-a3a02e3c34f8" config-ref="Database_Config" target="updateResult">
+			<db:sql><![CDATA[UPDATE product_item
 SET status = "Unavailable"
 WHERE id = :id]]></db:sql>
-			<db:input-parameters ><![CDATA[#[{'id': vars.productId}]]]></db:input-parameters>
+			<db:input-parameters><![CDATA[#[{'id': vars.productId}]]]></db:input-parameters>
 		</db:update>
-		<db:query-single doc:name="product_item" doc:id="8cdec5fd-4ae4-461b-a177-8da0c0c30114" config-ref="Database_Config" target="productItem">
-			<db:sql ><![CDATA[SELECT serial_no, name FROM product_item WHERE id = :id]]></db:sql>
-			<db:input-parameters ><![CDATA[#[{'id': vars.productId}]]]></db:input-parameters>
-		</db:query-single>
-		<ee:transform doc:name="queue payload" doc:id="9eef469c-a65a-4735-b928-8e667312600a">
+				<ee:transform doc:name="queue payload" doc:id="9eef469c-a65a-4735-b928-8e667312600a">
 			<ee:message>
 				<ee:set-payload><![CDATA[%dw 2.0
 output application/java
@@ -168,7 +190,9 @@ output application/java
 }]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
-		<jms:publish doc:name="SF_CHECKOUT_QUEUE" doc:id="c5aa942e-679e-494f-a036-674a7f88cd07" config-ref="JMS_Config" destination="SF_CHECKOUT_QUEUE"/>
+				<jms:publish doc:name="SF_CHECKOUT_QUEUE" doc:id="c5aa942e-679e-494f-a036-674a7f88cd07" config-ref="JMS_Config" destination="SF_CHECKOUT_QUEUE" />
+			</otherwise>
+		</choice>
 	</flow>
 	<flow name="checkout_queue_listener_flow" doc:id="4907a28b-f7e7-49f5-b4cf-47f7be9552e7">
 		<jms:listener doc:name="SF_CHECKOUT_QUEUE" doc:id="881bc827-a502-449a-906d-9e40445f7932" config-ref="JMS_Config" destination="SF_CHECKOUT_QUEUE">
@@ -275,6 +299,50 @@ output application/java
 		<salesforce:create type="Contact" doc:name="Contact" doc:id="08fe5ce8-a6e8-49aa-bce3-20f0b742af80" config-ref="Salesforce_Config">
 			<salesforce:records ><![CDATA[#[vars.contact]]]></salesforce:records>
 		</salesforce:create>
+	</flow>
+	<flow name="view_item_flow" doc:id="69192174-4ef0-4d98-9a53-ae744de1b832" >
+		<http:listener doc:name="GET /productItems/{ID}" doc:id="93d31ef8-e7ad-470f-911d-556cdd8ac5c4" config-ref="HTTP_Listener_config" path="/productItems/{ID}" allowedMethods="POST" />
+		<set-variable value="#[attributes.uriParams.ID]" doc:name="productId" doc:id="2fc1284a-d5eb-4ff5-9daa-e132f93c86e6" variableName="productId" />
+		<db:query-single doc:name="product_item" doc:id="825b0d40-4ee2-4d04-b152-20604a52b8ab" config-ref="Database_Config" target="productItem" >
+			<db:sql ><![CDATA[SELECT serial_no, name, status FROM product_item WHERE id = :id]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{'id': vars.productId}]]]></db:input-parameters>
+		</db:query-single>
+		<ee:transform doc:name="Transform Message" doc:id="8c8b59ec-f330-4e44-91b5-ec4779a3f1bf" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="sync_status_flow" doc:id="6c6cd350-4b30-420a-8f59-03c1621203dd" >
+		<salesforce:modified-object-listener objectType="ProductItem__c" doc:name="On Modified Object" doc:id="1c07e929-521a-4e24-960e-76f8b89ad3cc" config-ref="Salesforce_Config">
+			<scheduling-strategy >
+				<fixed-frequency frequency="5" timeUnit="MINUTES" />
+			</scheduling-strategy>
+		</salesforce:modified-object-listener>
+		<logger level="WARN" doc:name="Logger" doc:id="760dc004-ee9c-42af-8ff0-3e9b27926b37" message="#[output application/json&#10;---&#10;{&#10;	Id: payload.Id,&#10;	SerialNo__c: payload.SerialNo__c,&#10;	Status__c: payload.Status__c&#10;}]"/>
+		<db:query-single doc:name="product_item" doc:id="8f962bf0-766b-4eed-aa42-d130263ae5af" config-ref="Database_Config" target="productItem" >
+			<db:sql ><![CDATA[SELECT serial_no, name, status FROM product_item WHERE serial_no = :serial]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{ 'serial': payload.SerialNo__c }]]]></db:input-parameters>
+		</db:query-single>
+		<choice doc:name="Choice" doc:id="657d2be3-e227-48a8-9343-8ed5adbb5e4b" >
+			<when expression="#[vars.productItem.status != payload.Status__c]">
+				<db:update doc:name="product_item" doc:id="cfc93dd1-0291-4d60-a080-9e66d2d27be7" config-ref="Database_Config" target="updateResult" >
+					<db:sql ><![CDATA[UPDATE product_item
+SET status = :status
+WHERE serial_no = :serial]]></db:sql>
+					<db:input-parameters ><![CDATA[#[{
+	'serial': payload.SerialNo__c,
+	'status': payload.Status__c
+}]]]></db:input-parameters>
+				</db:update>
+			</when>
+			<otherwise >
+				<logger level="INFO" doc:name="Logger" doc:id="2379fa05-18d0-4053-94fc-e13125f3586c" />
+			</otherwise>
+		</choice>
 	</flow>
 	
 
