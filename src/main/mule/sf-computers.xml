@@ -301,7 +301,7 @@ output application/java
 		</salesforce:create>
 	</flow>
 	<flow name="view_item_flow" doc:id="69192174-4ef0-4d98-9a53-ae744de1b832" >
-		<http:listener doc:name="GET /productItems/{ID}" doc:id="93d31ef8-e7ad-470f-911d-556cdd8ac5c4" config-ref="HTTP_Listener_config" path="/productItems/{ID}" allowedMethods="POST" />
+		<http:listener doc:name="GET /productItems/{ID}" doc:id="93d31ef8-e7ad-470f-911d-556cdd8ac5c4" config-ref="HTTP_Listener_config" path="/productItems/{ID}" allowedMethods="GET" />
 		<set-variable value="#[attributes.uriParams.ID]" doc:name="productId" doc:id="2fc1284a-d5eb-4ff5-9daa-e132f93c86e6" variableName="productId" />
 		<db:query-single doc:name="product_item" doc:id="825b0d40-4ee2-4d04-b152-20604a52b8ab" config-ref="Database_Config" target="productItem" >
 			<db:sql ><![CDATA[SELECT serial_no, name, status FROM product_item WHERE id = :id]]></db:sql>
@@ -312,7 +312,7 @@ output application/java
 				<ee:set-payload ><![CDATA[%dw 2.0
 output application/json
 ---
-payload]]></ee:set-payload>
+vars.productItem]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
 	</flow>
