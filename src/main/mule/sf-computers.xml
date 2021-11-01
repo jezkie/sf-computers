@@ -191,6 +191,7 @@ output application/java
 			</ee:message>
 		</ee:transform>
 				<jms:publish doc:name="SF_CHECKOUT_QUEUE" doc:id="c5aa942e-679e-494f-a036-674a7f88cd07" config-ref="JMS_Config" destination="SF_CHECKOUT_QUEUE" />
+				<set-payload value="#['You have successfully checked out unit with Serial Number: ' ++ vars.productItem.serial_no]" doc:name="Set Payload" doc:id="663a60c1-8669-4644-baa4-a1075970a198" />
 			</otherwise>
 		</choice>
 	</flow>
@@ -209,16 +210,6 @@ output application/java
 	"serial" : payload.SerialNo__c
 }]]]></salesforce:parameters>
 		</salesforce:query>
-		<salesforce:update doc:name="ProductItem__c" doc:id="a9867f86-bbee-4df5-9c59-940a08f1bb26" config-ref="Salesforce_Config" type="ProductItem__c" target="productItemUpdate">
-			<salesforce:records ><![CDATA[#[output application/java
----
-[
-	{
-	Id: vars.productItem[0].Id,
-	Status__c: 'Unavailable'
-}
-]]]]></salesforce:records>
-		</salesforce:update>
 		<salesforce:query doc:name="Account" doc:id="fcfdebde-990e-4dcf-aa0a-2030ddcce763" config-ref="Salesforce_Config" target="accounts" targetValue="#[payload as Array]">
 			<salesforce:salesforce-query><![CDATA[SELECT Id FROM Account WHERE Name = ':name']]></salesforce:salesforce-query>
 			<salesforce:parameters><![CDATA[#[output application/java
@@ -231,6 +222,17 @@ output application/java
 		<flow-ref doc:name="insert_contact_flow" doc:id="9f4a824e-beb8-4664-9b87-30391f0c3553" name="insert_contact_flow" target="contactInsertResult" />
 		<logger level="INFO" doc:name="Logger" doc:id="b5c465e4-5bab-4959-8451-40e3a205a309" message=" Contact ID: #[vars.contactInsertResult.items[0].id]" />
 		<flow-ref doc:name="insert_opportunity_flow" doc:id="55804b79-efda-4a45-a571-5f16ef8f9cc3" name="insert_opportunity_flow" target="opportunityInsertResult" />
+		<salesforce:update doc:name="ProductItem__c" doc:id="a9867f86-bbee-4df5-9c59-940a08f1bb26" config-ref="Salesforce_Config" type="ProductItem__c" target="productItemUpdate">
+			<salesforce:records><![CDATA[#[output application/java
+---
+[
+	{
+	Id: vars.productItem[0].Id,
+	Status__c: 'Unavailable',
+	Opportunity__c: vars.opportunityInsertResult.items[0].id
+}
+]]]]></salesforce:records>
+		</salesforce:update>
 		<logger level="INFO" doc:name="Logger" doc:id="f676373e-ea38-4870-9a31-ae8aee44215a" message="Opportunity ID: #[vars.opportunityInsertResult.items[0].id]" />
 		<flow-ref doc:name="insert_opportunity_contact_flow" doc:id="8c807dba-482b-4571-9959-2074ca7096df" name="insert_opportunity_contact_flow" target="opportunityContactInsertResult" />
 		<logger level="INFO" doc:name="Logger" doc:id="e45e96b8-5e6f-4d4d-bb10-808091b8197f" message="Opportunity Contact Role ID: #[vars.opportunityContactInsertResult.items[0].id]" />
@@ -319,23 +321,25 @@ vars.productItem]]></ee:set-payload>
 	<flow name="sync_status_flow" doc:id="6c6cd350-4b30-420a-8f59-03c1621203dd" >
 		<salesforce:modified-object-listener objectType="ProductItem__c" doc:name="On Modified Object" doc:id="1c07e929-521a-4e24-960e-76f8b89ad3cc" config-ref="Salesforce_Config">
 			<scheduling-strategy >
-				<fixed-frequency frequency="5" timeUnit="MINUTES" />
+				<fixed-frequency frequency="5" timeUnit="SECONDS" />
 			</scheduling-strategy>
 		</salesforce:modified-object-listener>
 		<logger level="WARN" doc:name="Logger" doc:id="760dc004-ee9c-42af-8ff0-3e9b27926b37" message="#[output application/json&#10;---&#10;{&#10;	Id: payload.Id,&#10;	SerialNo__c: payload.SerialNo__c,&#10;	Status__c: payload.Status__c&#10;}]"/>
 		<db:query-single doc:name="product_item" doc:id="8f962bf0-766b-4eed-aa42-d130263ae5af" config-ref="Database_Config" target="productItem" >
-			<db:sql ><![CDATA[SELECT serial_no, name, status FROM product_item WHERE serial_no = :serial]]></db:sql>
+			<db:sql ><![CDATA[SELECT serial_no, name, location status FROM product_item WHERE serial_no = :serial]]></db:sql>
 			<db:input-parameters ><![CDATA[#[{ 'serial': payload.SerialNo__c }]]]></db:input-parameters>
 		</db:query-single>
 		<choice doc:name="Choice" doc:id="657d2be3-e227-48a8-9343-8ed5adbb5e4b" >
-			<when expression="#[vars.productItem.status != payload.Status__c]">
+			<when expression="#[vars.productItem.status != payload.Status__c or vars.productItem.location != payload.Location__c]">
 				<db:update doc:name="product_item" doc:id="cfc93dd1-0291-4d60-a080-9e66d2d27be7" config-ref="Database_Config" target="updateResult" >
 					<db:sql ><![CDATA[UPDATE product_item
-SET status = :status
+SET status = :status,
+location = :location
 WHERE serial_no = :serial]]></db:sql>
 					<db:input-parameters ><![CDATA[#[{
 	'serial': payload.SerialNo__c,
-	'status': payload.Status__c
+	'status': payload.Status__c,
+	'location': payload.Location__c
 }]]]></db:input-parameters>
 				</db:update>
 			</when>
@@ -343,6 +347,21 @@ WHERE serial_no = :serial]]></db:sql>
 				<logger level="INFO" doc:name="Logger" doc:id="2379fa05-18d0-4053-94fc-e13125f3586c" />
 			</otherwise>
 		</choice>
+	</flow>
+	<flow name="view_items_flow" doc:id="612e95bb-8ece-4705-b2bc-52450d87ec11" >
+		<http:listener doc:name="GET /productItems" doc:id="cacfc92b-af06-46d0-b738-c97d64760821" config-ref="HTTP_Listener_config" path="/productItems" allowedMethods="GET" />
+		<db:select doc:name="Select available product items" doc:id="4d7170fd-2088-4efb-9a01-2ce5957d88ef" config-ref="Database_Config">
+			<db:sql ><![CDATA[SELECT serial_no, name, location, status FROM product_item WHERE status = 'Available' and location = :location]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{'location': attributes.queryParams['location']}]]]></db:input-parameters>
+		</db:select>
+		<ee:transform doc:name="Transform Message" doc:id="f92c970c-7bf2-483b-b01e-bf3bae494135" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
 	</flow>
 	
 
